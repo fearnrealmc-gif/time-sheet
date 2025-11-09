@@ -1,0 +1,5 @@
+{
+  "name": "Workforce Attendance & Site Management",
+  "description": "A production-grade web app for managing workforce attendance and site assignments. It connects three roles: HR, Foreman, and Engineer, with features like an Excel-like attendance grid, monthly cycle management, role-based workflows, and reporting.",
+  "requestFramePermissions": []
+}
