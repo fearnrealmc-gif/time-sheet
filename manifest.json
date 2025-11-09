@@ -1,0 +1,26 @@
+{
+  "short_name": "Attendance",
+  "name": "Workforce Attendance & Site Management",
+  "description": "A production-grade web app for managing workforce attendance and site assignments.",
+  "icons": [
+    {
+      "src": "https://assets.website-files.com/62657d4d93557459a117b2b9/62740375a7440b615951666f_624c585c53443440306d7350_icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    },
+    {
+      "src": "https://assets.website-files.com/62657d4d93557459a117b2b9/62740375a7440b615951666f_624c585c53443440306d7350_icon.svg",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://assets.website-files.com/62657d4d93557459a117b2b9/62740375a7440b615951666f_624c585c53443440306d7350_icon.svg",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#1A2D7A",
+  "background_color": "#101B4B"
+}
