@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-// Fix: Imported Language type from types.ts
+import { createClient } from '@supabase/supabase-js';
 import { User, Role, Worker, Site, Language, Company, AttendanceEntry } from './types';
-import { MOCK_USERS, MOCK_WORKERS, MOCK_SITES, TRANSLATIONS, MOCK_COMPANY, MOCK_ATTENDANCE_ENTRIES } from './constants';
+import { MOCK_USERS, MOCK_WORKERS, MOCK_SITES, MOCK_COMPANY, MOCK_ATTENDANCE_ENTRIES, TRANSLATIONS } from './constants';
 import { DashboardLayout } from './components/Layout';
 import { MainDashboard } from './components/Dashboard';
 import { WorkersPage } from './components/workers/WorkersPage';
@@ -9,29 +9,69 @@ import { UsersPage } from './components/users/UsersPage';
 import { SitesPage } from './components/sites/SitesPage';
 import { SettingsPage } from './components/settings/SettingsPage';
 import { ReviewsPage } from './components/reviews/ReviewsPage';
-import { Button } from './components/common/UI';
+import { Button, Spinner } from './components/common/UI';
+
+// --- Supabase Client Setup ---
+const supabaseUrl = process.env.SUPABASE_URL || 'https://example-project.supabase.co';
+const supabaseKey = process.env.SUPABASE_ANON_KEY || 'example-anon-key';
+const isDemoMode = supabaseUrl.includes('example-project') || supabaseKey.includes('example-anon-key');
+
+if (isDemoMode) {
+    console.warn("Supabase is not configured. Running in DEMO MODE. All data is mocked and will not be saved. To connect your database, update the placeholder credentials in App.tsx.");
+}
+
+type Database = {
+  public: {
+    Tables: {
+      companies: {
+        Row: Company;
+        Insert: Omit<Company, 'id'>;
+        Update: Partial<Company>;
+      };
+      users: {
+        Row: User;
+        Insert: Omit<User, 'id'>;
+        Update: Partial<User>;
+      };
+       workers: {
+        Row: Worker;
+        Insert: Omit<Worker, 'id'>;
+        Update: Partial<Worker>;
+      };
+       sites: {
+        Row: Site;
+        Insert: Omit<Site, 'id'>;
+        Update: Partial<Site>;
+      };
+      attendance_entries: {
+        Row: AttendanceEntry;
+        Insert: Omit<AttendanceEntry, 'id'>;
+        Update: Partial<AttendanceEntry>;
+      };
+    };
+  };
+};
+
+const supabase = createClient<Database>(supabaseUrl, supabaseKey);
+
 
 // --- Login Screen ---
-const LoginScreen: React.FC<{ onLogin: (user: User) => void; users: User[]; company: Company | null; }> = ({ onLogin, users, company }) => {
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
+const LoginScreen: React.FC<{ company: Company | null; }> = ({ company }) => {
+    const { login, t } = useApp();
+    const [email, setEmail] = useState('hr@demo.co');
+    const [password, setPassword] = useState('password123');
     const [error, setError] = useState('');
-    
-    // A trick to get the t function without the full context
-    const t = (key: keyof typeof TRANSLATIONS.en) => {
-        const lang = (localStorage.getItem('language') as Language) || 'en';
-        return TRANSLATIONS[lang][key] || key;
-    };
+    const [loading, setLoading] = useState(false);
 
-    const handleLogin = (e: React.FormEvent) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
+        setLoading(true);
         setError('');
-        const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
-        if (user) {
-            onLogin(user);
-        } else {
-            setError(t('login_error'));
+        const { error } = await login(email, password);
+        if (error) {
+            setError(error.message);
         }
+        setLoading(false);
     };
     
     const inputClasses = "w-full px-3 py-2 bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white border border-gray-200 dark:border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500";
@@ -56,7 +96,9 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void; users: User[]; comp
                     </div>
                     {error && <p className="text-red-500 text-sm text-center pt-2">{error}</p>}
                     <div className="pt-4">
-                        <Button type="submit" className="w-full">{t('login')}</Button>
+                        <Button type="submit" className="w-full" disabled={loading}>
+                            {loading ? <Spinner/> : t('login')}
+                        </Button>
                     </div>
                 </form>
             </div>
@@ -66,13 +108,11 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void; users: User[]; comp
 
 
 // --- App Context ---
-// Fix: Removed local Language type definition, now imported from types.ts
 type Theme = 'light' | 'dark';
 type View = 'dashboard' | 'workers' | 'sites' | 'reviews' | 'settings' | 'attendance' | 'users';
 
 interface AppContextType {
   currentUser: User | null;
-  setCurrentUser: (user: User | null) => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   language: Language;
@@ -81,18 +121,19 @@ interface AppContextType {
   view: View;
   setView: (view: View) => void;
   workers: Worker[];
-  saveWorker: (worker: Worker) => void;
-  deleteWorker: (workerId: string) => void;
+  saveWorker: (worker: Worker) => Promise<void>;
+  deleteWorker: (workerId: string) => Promise<void>;
   users: User[];
-  saveUser: (user: User) => void;
-  deleteUser: (userId: string) => void;
+  saveUser: (user: User) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
   sites: Site[];
-  saveSite: (site: Site) => void;
-  deleteSite: (siteId: string) => void;
+  saveSite: (site: Site) => Promise<void>;
+  deleteSite: (siteId: string) => Promise<void>;
   company: Company | null;
-  saveCompany: (company: Partial<Company>) => void;
+  saveCompany: (company: Partial<Company>) => Promise<void>;
   attendanceEntries: AttendanceEntry[];
-  updateAttendanceEntry: (workerId: string, date: string, newEntryData: Partial<Omit<AttendanceEntry, 'id' | 'worker_id' | 'date'>>) => void;
+  updateAttendanceEntry: (workerId: string, date: string, newEntryData: Partial<Omit<AttendanceEntry, 'id' | 'worker_id' | 'date'>>) => Promise<void>;
+  login: (email: string, pass: string) => Promise<{ error: Error | null }>;
   logout: () => void;
 }
 
@@ -111,138 +152,275 @@ const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [theme, setThemeState] = useState<Theme>(() => (localStorage.getItem('theme') as Theme) || 'light');
   const [language, setLanguageState] = useState<Language>(() => (localStorage.getItem('language') as Language) || 'en');
   const [view, setView] = useState<View>('dashboard');
-  const [workers, setWorkers] = useState<Worker[]>(MOCK_WORKERS);
-  const [users, setUsers] = useState<User[]>(MOCK_USERS);
-  const [sites, setSites] = useState<Site[]>(MOCK_SITES);
-  const [company, setCompany] = useState<Company | null>(MOCK_COMPANY);
-  const [attendanceEntries, setAttendanceEntries] = useState<AttendanceEntry[]>(MOCK_ATTENDANCE_ENTRIES);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [company, setCompany] = useState<Company | null>(null);
+  const [attendanceEntries, setAttendanceEntries] = useState<AttendanceEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const logout = () => {
-      setCurrentUser(null);
-      setView('dashboard'); // Reset to default view
-  };
+  useEffect(() => {
+    if (isDemoMode) {
+      setCompany(MOCK_COMPANY);
+      setLoading(false);
+      return;
+    }
 
-  const saveWorker = (workerToSave: Worker) => {
-    setWorkers(prev => {
-        const existing = prev.find(w => w.id === workerToSave.id);
-        if (existing) {
-            return prev.map(w => w.id === workerToSave.id ? workerToSave : w);
+    const getSession = async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            await fetchProfileAndData(session.user);
         } else {
-            // In a real app, ID would come from the DB
-            return [...prev, { ...workerToSave, id: `w${Date.now()}` }];
+            setLoading(false);
+        }
+    };
+    getSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (_event, session) => {
+        if (session) {
+            await fetchProfileAndData(session.user);
+        } else {
+            setCurrentUser(null);
+            setWorkers([]);
+            setUsers([]);
+            setSites([]);
+            setCompany(null);
+            setAttendanceEntries([]);
         }
     });
-  };
 
-  const deleteWorker = (workerId: string) => {
-    if (currentUser?.role !== Role.HR) {
-        alert("You do not have permission to delete workers. Only HR can perform this action.");
+    return () => {
+        authListener.subscription.unsubscribe();
+    };
+}, []);
+
+  const fetchProfileAndData = async (authUser: any) => {
+    setLoading(true);
+    const { data: profile, error } = await supabase.from('users').select('*').eq('id', authUser.id).single();
+    if (error) {
+        console.error('Error fetching user profile:', error);
+        setLoading(false);
         return;
     }
-    if (window.confirm('Are you sure you want to delete this worker?')) {
-        setWorkers(prev => prev.filter(w => w.id !== workerId));
-        console.log(`HR user ${currentUser.id} deleted worker ${workerId}.`);
+    setCurrentUser(profile);
+    if (profile) {
+        await fetchData(profile.company_id);
+    }
+    setLoading(false);
+  };
+  
+  const fetchData = async (companyId: string) => {
+      const [
+          { data: workersData },
+          { data: usersData },
+          { data: sitesData },
+          { data: companyData },
+          { data: attendanceData }
+      ] = await Promise.all([
+          supabase.from('workers').select('*').eq('company_id', companyId),
+          supabase.from('users').select('*').eq('company_id', companyId),
+          supabase.from('sites').select('*').eq('company_id', companyId),
+          supabase.from('companies').select('*').eq('id', companyId).single(),
+          supabase.from('attendance_entries').select('*') // Assuming entries are implicitly linked to company via worker
+      ]);
+
+      setWorkers(workersData || []);
+      setUsers(usersData || []);
+      setSites(sitesData || []);
+      setCompany(companyData);
+      setAttendanceEntries(attendanceData || []);
+  };
+  
+  const login = async (email: string, pass: string) => {
+      if (isDemoMode) {
+          const user = MOCK_USERS.find(u => u.email === email && u.password === pass);
+          if (user) {
+              setCurrentUser(user);
+              setWorkers(MOCK_WORKERS);
+              setSites(MOCK_SITES);
+              setUsers(MOCK_USERS);
+              setCompany(MOCK_COMPANY);
+              setAttendanceEntries(MOCK_ATTENDANCE_ENTRIES);
+              return { error: null };
+          } else {
+              return { error: new Error('Invalid email or password.') };
+          }
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+      return { error };
+  };
+
+  const logout = async () => {
+      if (!isDemoMode) {
+        await supabase.auth.signOut();
+      }
+      setCurrentUser(null);
+      setWorkers([]);
+      setUsers([]);
+      setSites([]);
+      setAttendanceEntries([]);
+      // Keep company data for login screen
+      if(!isDemoMode) setCompany(null);
+      setView('dashboard');
+  };
+  
+  const saveWorker = async (workerToSave: Worker) => {
+    if (isDemoMode) {
+      if (workerToSave.id) {
+        setWorkers(prev => prev.map(w => w.id === workerToSave.id ? workerToSave : w));
+      } else {
+        const newWorker = { ...workerToSave, id: `w${Date.now()}`, company_id: 'c1' };
+        setWorkers(prev => [...prev, newWorker]);
+      }
+      return;
+    }
+    const payload = { ...workerToSave, company_id: currentUser!.company_id };
+    if (workerToSave.id) {
+      const { data, error } = await supabase.from('workers').update(payload).eq('id', workerToSave.id).select().single();
+      if (error) console.error("Error updating worker", error);
+      else setWorkers(prev => prev.map(w => w.id === data.id ? data : w));
+    } else {
+      const { data, error } = await supabase.from('workers').insert(payload).select().single();
+      if (error) console.error("Error creating worker", error);
+      else setWorkers(prev => [...prev, data]);
     }
   };
 
-  const saveUser = (userToSave: User) => {
-    setUsers(prev => {
-        const existing = prev.find(u => u.id === userToSave.id);
-        if (existing) {
-            return prev.map(u => {
-                if (u.id === userToSave.id) {
-                    const finalUser = { ...u, ...userToSave };
-                    // If password from form is empty/undefined, keep the old one
-                    if (userToSave.password === '' || userToSave.password === undefined) {
-                      finalUser.password = u.password;
-                    }
-                    return finalUser;
-                }
-                return u;
-            });
-        } else { // New user
-            const newUser = {
-                ...userToSave,
-                id: `u${Date.now()}`,
-                company_id: 'c1',
-            };
-            return [...prev, newUser];
+  const deleteWorker = async (workerId: string) => {
+    if (currentUser?.role !== Role.HR) return;
+    if (window.confirm('Are you sure you want to delete this worker?')) {
+        if (isDemoMode) {
+            setWorkers(prev => prev.filter(w => w.id !== workerId));
+            return;
         }
-    });
+        const { error } = await supabase.from('workers').delete().eq('id', workerId);
+        if (error) console.error("Error deleting worker", error);
+        else setWorkers(prev => prev.filter(w => w.id !== workerId));
+    }
   };
 
-  const deleteUser = (userId: string) => {
-      if(currentUser?.id === userId) {
-          alert("You cannot delete yourself.");
+  const saveUser = async (userToSave: User) => {
+    if (isDemoMode) {
+        if (userToSave.id) {
+            setUsers(prev => prev.map(u => u.id === userToSave.id ? userToSave : u));
+        } else {
+            const newUser = { ...userToSave, id: `u${Date.now()}`, company_id: 'c1' };
+            setUsers(prev => [...prev, newUser]);
+        }
+        return;
+    }
+    const payload = { ...userToSave, company_id: currentUser!.company_id };
+    delete payload.password; 
+    if (userToSave.id) {
+        const { data, error } = await supabase.from('users').update(payload).eq('id', userToSave.id).select().single();
+        if (error) console.error("Error updating user", error);
+        else setUsers(prev => prev.map(u => u.id === data.id ? data : u));
+    } else {
+        const { data, error } = await supabase.from('users').insert(payload).select().single();
+        if (error) console.error("Error creating user profile", error);
+        else setUsers(prev => [...prev, data]);
+    }
+  };
+
+  const deleteUser = async (userId: string) => {
+      if(currentUser?.id === userId) return;
+      if(window.confirm('Are you sure you want to delete this user?')) {
+          if (isDemoMode) {
+              setUsers(prev => prev.filter(u => u.id !== userId));
+              return;
+          }
+          const { error } = await supabase.from('users').delete().eq('id', userId);
+          if (error) console.error("Error deleting user", error);
+          else setUsers(prev => prev.filter(u => u.id !== userId));
+      }
+  };
+  
+  const saveSite = async (siteToSave: Site) => {
+    if (isDemoMode) {
+        if (siteToSave.id) {
+            setSites(prev => prev.map(s => s.id === siteToSave.id ? siteToSave : s));
+        } else {
+            const newSite = { ...siteToSave, id: `s${Date.now()}`, company_id: 'c1' };
+            setSites(prev => [...prev, newSite]);
+        }
+        return;
+    }
+    const payload = { ...siteToSave, company_id: currentUser!.company_id };
+    if (siteToSave.id) {
+        const { data, error } = await supabase.from('sites').update(payload).eq('id', siteToSave.id).select().single();
+        if (error) console.error("Error updating site", error);
+        else setSites(prev => prev.map(s => s.id === data.id ? data : s));
+    } else {
+        const { data, error } = await supabase.from('sites').insert(payload).select().single();
+        if (error) console.error("Error creating site", error);
+        else setSites(prev => [...prev, data]);
+    }
+  };
+
+  const deleteSite = async (siteId: string) => {
+    if (window.confirm('Are you sure you want to delete this site?')) {
+        if (isDemoMode) {
+            setSites(prev => prev.filter(s => s.id !== siteId));
+            return;
+        }
+        const { error } = await supabase.from('sites').delete().eq('id', siteId);
+        if (error) console.error("Error deleting site", error);
+        else setSites(prev => prev.filter(s => s.id !== siteId));
+    }
+  };
+  
+  const saveCompany = async (companyToSave: Partial<Company>) => {
+    if (isDemoMode) {
+        setCompany(prev => (prev ? { ...prev, ...companyToSave } : null));
+        return;
+    }
+    if (!company) return;
+    const { data, error } = await supabase.from('companies').update(companyToSave).eq('id', company.id).select().single();
+    if(error) console.error("Error updating company", error);
+    else setCompany(data);
+  };
+  
+  const updateAttendanceEntry = async (workerId: string, date: string, newEntryData: Partial<Omit<AttendanceEntry, 'id'|'worker_id'|'date'>>) => {
+      if (isDemoMode) {
+          const payload = { worker_id: workerId, date: date, ...newEntryData };
+          if (payload.status && payload.status !== 'P') {
+              payload.site_id = undefined;
+              payload.overtime_hours = undefined;
+          }
+          setAttendanceEntries(prev => {
+              const existingIndex = prev.findIndex(e => e.worker_id === workerId && e.date === date);
+              const newEntry = {
+                  ...prev.find(e => e.worker_id === workerId && e.date === date),
+                  id: `e${Date.now()}`,
+                  ...payload
+              } as AttendanceEntry;
+              if (existingIndex > -1) {
+                  const updated = [...prev];
+                  updated[existingIndex] = newEntry;
+                  return updated;
+              }
+              return [...prev, newEntry];
+          });
           return;
       }
-      if(window.confirm('Are you sure you want to delete this user?')) {
-          setUsers(prev => prev.filter(u => u.id !== userId));
-      }
-  };
-  
-  const saveSite = (siteToSave: Site) => {
-    setSites(prev => {
-      const existing = prev.find(s => s.id === siteToSave.id);
-      if (existing) {
-        return prev.map(s => s.id === siteToSave.id ? siteToSave : s);
-      } else {
-        return [...prev, { ...siteToSave, id: `s${Date.now()}`, company_id: 'c1' }];
-      }
-    });
-  };
 
-  const deleteSite = (siteId: string) => {
-    if (window.confirm('Are you sure you want to delete this site?')) {
-      setSites(prev => prev.filter(s => s.id !== siteId));
-    }
-  };
-  
-  const saveCompany = (companyToSave: Partial<Company>) => {
-    setCompany(prev => {
-        if (!prev) return companyToSave as Company;
-        const newCompany = { ...prev, ...companyToSave };
-        // In a real app, this would also save to the DB.
-        console.log("Company info updated:", newCompany);
-        return newCompany;
-    });
-  };
-  
-  const updateAttendanceEntry = (workerId: string, date: string, newEntryData: Partial<Omit<AttendanceEntry, 'id'|'worker_id'|'date'>>) => {
-    setAttendanceEntries(prev => {
+      const payload = { worker_id: workerId, date: date, ...newEntryData };
+      if (payload.status && payload.status !== 'P') {
+          payload.site_id = undefined;
+          payload.overtime_hours = undefined;
+      }
+      const { data, error } = await supabase.from('attendance_entries').upsert(payload, { onConflict: 'worker_id, date' }).select().single();
+      if (error) { console.error("Error updating attendance", error); return; }
+      setAttendanceEntries(prev => {
         const existingIndex = prev.findIndex(e => e.worker_id === workerId && e.date === date);
-
         if (existingIndex > -1) {
-            // Update existing entry
-            const updatedEntries = [...prev];
-            const currentEntry = updatedEntries[existingIndex];
-            updatedEntries[existingIndex] = {
-                ...currentEntry,
-                ...newEntryData,
-                status: newEntryData.status !== undefined ? newEntryData.status : currentEntry.status,
-            };
-            // If new status is not 'Present', clear site and overtime
-            if (newEntryData.status && newEntryData.status !== 'P') {
-                updatedEntries[existingIndex].site_id = undefined;
-                updatedEntries[existingIndex].overtime_hours = undefined;
-            }
-            return updatedEntries;
-        } else if (newEntryData.status) { // Only create if status is not empty
-            // Create new entry
-            const newEntry: AttendanceEntry = {
-                id: `e${Date.now()}`,
-                worker_id: workerId,
-                date: date,
-                status: newEntryData.status || '',
-                site_id: newEntryData.site_id,
-                overtime_hours: newEntryData.overtime_hours,
-            };
-            return [...prev, newEntry];
+            const updated = [...prev];
+            updated[existingIndex] = data;
+            return updated;
         }
-        return prev; // No change
-    });
+        return [...prev, data];
+      });
   };
-
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -257,7 +435,6 @@ const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     localStorage.setItem('language', language);
   }, [language]);
   
-  // Fix: This useEffect block now correctly reads the optional `language` property from `currentUser`.
   useEffect(() => {
       if(currentUser?.language) {
           setLanguageState(currentUser.language);
@@ -268,7 +445,6 @@ const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
 
   const value = {
     currentUser,
-    setCurrentUser,
     theme,
     setTheme: setThemeState,
     language,
@@ -289,10 +465,13 @@ const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     saveCompany,
     attendanceEntries,
     updateAttendanceEntry,
+    login,
     logout,
   };
 
-  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
+  return <AppContext.Provider value={value}>
+    {loading ? <div className="min-h-screen flex items-center justify-center"><Spinner /></div> : children}
+  </AppContext.Provider>;
 };
 
 
@@ -306,10 +485,10 @@ function App() {
 }
 
 const AppContent: React.FC = () => {
-    const { currentUser, setCurrentUser, view, users, company } = useApp();
+    const { currentUser, view, company } = useApp();
 
     if (!currentUser) {
-        return <LoginScreen onLogin={setCurrentUser} users={users} company={company} />;
+        return <LoginScreen company={company} />;
     }
 
     const renderView = () => {
@@ -326,6 +505,8 @@ const AppContent: React.FC = () => {
           return <SettingsPage />;
         case 'reviews':
           return <ReviewsPage />;
+        case 'attendance':
+            return <MainDashboard />; // Or a dedicated page if exists
         default:
           return <MainDashboard />;
       }
