@@ -12,7 +12,7 @@ import { ReviewsPage } from './components/reviews/ReviewsPage';
 import { Button } from './components/common/UI';
 
 // --- Login Screen ---
-const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) => {
+const LoginScreen: React.FC<{ onLogin: (user: User) => void; users: User[]; company: Company | null; }> = ({ onLogin, users, company }) => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -26,7 +26,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
     const handleLogin = (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        const user = MOCK_USERS.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
+        const user = users.find(u => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
         if (user) {
             onLogin(user);
         } else {
@@ -41,7 +41,7 @@ const LoginScreen: React.FC<{ onLogin: (user: User) => void }> = ({ onLogin }) =
         <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-navy-950 p-4">
             <div className="p-8 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-sm">
                 <div className="flex justify-center mb-6">
-                    <img src="https://picsum.photos/60" alt="Logo" className="rounded-full h-16 w-16" />
+                    <img src={company?.logo_url || "https://picsum.photos/60"} alt="Logo" className="rounded-full h-16 w-16" />
                 </div>
                 <h2 className="text-2xl font-bold text-center text-black dark:text-white mb-2">{t('welcome_back')}</h2>
                 <p className="text-center text-gray-600 dark:text-gray-400 mb-6">{t('login_prompt')}</p>
@@ -306,10 +306,10 @@ function App() {
 }
 
 const AppContent: React.FC = () => {
-    const { currentUser, setCurrentUser, view } = useApp();
+    const { currentUser, setCurrentUser, view, users, company } = useApp();
 
     if (!currentUser) {
-        return <LoginScreen onLogin={setCurrentUser} />;
+        return <LoginScreen onLogin={setCurrentUser} users={users} company={company} />;
     }
 
     const renderView = () => {
